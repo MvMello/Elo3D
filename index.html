@@ -801,10 +801,33 @@ footer{border-top:1px solid var(--line);padding:56px 0 28px;background:var(--bg-
       <div class="eyebrow">Compra realizada</div>
       <h2 class="section-title">Pedido confirmado!</h2>
       <p style="color:var(--text-dim);font-size:15px;margin-top:16px;line-height:1.7;">
-        Recebemos o seu pagamento. Em breve você vai receber uma confirmação com os detalhes do pedido e o código de rastreamento assim que ele for enviado.
+        Recebemos o seu pagamento. Agora só falta o endereço de entrega pra gente enviar seu pedido.
       </p>
       <p class="mono" id="orderRefDisplay" style="color:var(--gold);font-size:13px;margin-top:20px;"></p>
-      <div style="display:flex;gap:12px;justify-content:center;margin-top:32px;flex-wrap:wrap;">
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0;">
+    <div class="container" style="max-width:420px;">
+      <div class="bracket" style="padding:28px;">
+        <div class="pd-label">Endereço de entrega</div>
+        <form id="shippingForm" style="display:flex;flex-direction:column;gap:12px;">
+          <input type="text" placeholder="CEP" id="shipCep" required style="padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+          <input type="text" placeholder="Endereço (rua)" id="shipRua" required style="padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+          <div style="display:flex;gap:10px;">
+            <input type="text" placeholder="Número" id="shipNumero" required style="flex:1;padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+            <input type="text" placeholder="Complemento" id="shipComplemento" style="flex:2;padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+          </div>
+          <input type="text" placeholder="Bairro" id="shipBairro" required style="padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+          <div style="display:flex;gap:10px;">
+            <input type="text" placeholder="Cidade" id="shipCidade" required style="flex:2;padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+            <input type="text" placeholder="UF" id="shipUf" maxlength="2" required style="flex:1;padding:12px 14px;background:var(--bg-panel);border:1px solid var(--line-strong);color:var(--text);font-family:'Space Grotesk',sans-serif;font-size:14px;">
+          </div>
+          <button class="btn btn-gold" type="submit" style="justify-content:center;margin-top:8px;">Salvar endereço</button>
+        </form>
+        <p id="shippingSaved" style="display:none;color:var(--green-bright);font-size:13px;margin-top:14px;">✓ Endereço salvo! Seu pedido será enviado pra esse endereço.</p>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:24px;flex-wrap:wrap;">
         <a href="#produtos" data-nav class="btn btn-outline">Continuar comprando</a>
         <a href="#home" data-nav class="btn btn-gold">Voltar ao início</a>
       </div>
@@ -910,17 +933,6 @@ footer{border-top:1px solid var(--line);padding:56px 0 28px;background:var(--bg-
         <input type="email" placeholder="E-mail" required>
         <input type="tel" placeholder="Celular" required>
         <input type="text" placeholder="CPF" required>
-        <input type="text" placeholder="CEP" id="signupCep" required>
-        <input type="text" placeholder="Endereço (rua)" id="signupRua" required>
-        <div style="display:flex;gap:10px;">
-          <input type="text" placeholder="Número" style="flex:1;" required>
-          <input type="text" placeholder="Complemento" style="flex:2;">
-        </div>
-        <input type="text" placeholder="Bairro" required>
-        <div style="display:flex;gap:10px;">
-          <input type="text" placeholder="Cidade" style="flex:2;" required>
-          <input type="text" placeholder="UF" maxlength="2" style="flex:1;" required>
-        </div>
         <input type="password" placeholder="Senha" required>
         <input type="password" placeholder="Confirmar senha" required>
         <button class="btn btn-gold" type="submit">Criar conta</button>
@@ -1600,6 +1612,55 @@ document.getElementById('cepBtn').addEventListener('click', ()=>{
 document.getElementById('couponBtn').addEventListener('click', ()=>{
   showToast('Cupons serão validados na próxima fase (checkout)');
 });
+// preenchimento automático do endereço de entrega a partir do CEP
+document.getElementById('shipCep').addEventListener('blur', async ()=>{
+  const cep = document.getElementById('shipCep').value.replace(/\D/g,'');
+  if(cep.length !== 8) return;
+  try{
+    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const data = await res.json();
+    if(data.erro) return;
+    document.getElementById('shipRua').value = data.logradouro || '';
+    document.getElementById('shipBairro').value = data.bairro || '';
+    document.getElementById('shipCidade').value = data.localidade || '';
+    document.getElementById('shipUf').value = data.uf || '';
+  } catch(e){ console.error('Erro ao buscar CEP:', e); }
+});
+
+document.getElementById('shippingForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const endereco = {
+    cep: document.getElementById('shipCep').value,
+    rua: document.getElementById('shipRua').value,
+    numero: document.getElementById('shipNumero').value,
+    complemento: document.getElementById('shipComplemento').value,
+    bairro: document.getElementById('shipBairro').value,
+    cidade: document.getElementById('shipCidade').value,
+    uf: document.getElementById('shipUf').value
+  };
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try{
+    const ref = localStorage.getItem('elo3d_last_order') || '';
+    if(currentUser && firebaseReady){
+      await fbDb.collection('customers').doc(currentUser.uid).set({ endereco }, { merge:true });
+      if(ref){
+        await fbDb.collection('orders').doc(ref).set({
+          endereco, customerId: currentUser.uid,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge:true });
+      }
+    }
+    document.getElementById('shippingForm').style.display = 'none';
+    document.getElementById('shippingSaved').style.display = 'block';
+  } catch(err){
+    console.error(err);
+    showToast('Erro ao salvar endereço. Tenta de novo.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar endereço';
+  }
+});
+
 document.getElementById('checkoutBtn').addEventListener('click', async ()=>{
   if(cart.length === 0){ showToast('Seu carrinho está vazio'); return; }
 
@@ -1702,29 +1763,11 @@ document.querySelectorAll('.modal-tab').forEach(tab=>{
   });
 });
 
-// preenchimento automático de endereço a partir do CEP
-document.getElementById('signupCep').addEventListener('blur', async ()=>{
-  const cepInput = document.getElementById('signupCep');
-  const cep = cepInput.value.replace(/\D/g,'');
-  if(cep.length !== 8) return;
-  try{
-    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-    const data = await res.json();
-    if(data.erro) return;
-    const form = document.getElementById('cadastroForm');
-    const inputs = form.querySelectorAll('input');
-    document.getElementById('signupRua').value = data.logradouro || '';
-    inputs[8].value = data.bairro || ''; // bairro
-    inputs[9].value = data.localidade || ''; // cidade
-    inputs[10].value = data.uf || ''; // uf
-  } catch(e){ console.error('Erro ao buscar CEP:', e); }
-});
-
 document.getElementById('cadastroForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   if(!requireFirebase()) return;
   const inputs = e.target.querySelectorAll('input');
-  const [nome, email, celular, cpf, cep, rua, numero, complemento, bairro, cidade, uf, senha, confirmar] = Array.from(inputs).map(i=>i.value);
+  const [nome, email, celular, cpf, senha, confirmar] = Array.from(inputs).map(i=>i.value);
   if(senha !== confirmar){ showToast('As senhas não coincidem'); return; }
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true; btn.textContent = 'Criando conta...';
@@ -1733,7 +1776,6 @@ document.getElementById('cadastroForm').addEventListener('submit', async (e)=>{
     const uid = cred.user.uid;
     const profile = {
       name: nome, email, celular, cpf,
-      endereco: { cep, rua, numero, complemento, bairro, cidade, uf },
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     await fbDb.collection('customers').doc(uid).set(profile);
