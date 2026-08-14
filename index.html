@@ -910,6 +910,17 @@ footer{border-top:1px solid var(--line);padding:56px 0 28px;background:var(--bg-
         <input type="email" placeholder="E-mail" required>
         <input type="tel" placeholder="Celular" required>
         <input type="text" placeholder="CPF" required>
+        <input type="text" placeholder="CEP" id="signupCep" required>
+        <input type="text" placeholder="Endereço (rua)" id="signupRua" required>
+        <div style="display:flex;gap:10px;">
+          <input type="text" placeholder="Número" style="flex:1;" required>
+          <input type="text" placeholder="Complemento" style="flex:2;">
+        </div>
+        <input type="text" placeholder="Bairro" required>
+        <div style="display:flex;gap:10px;">
+          <input type="text" placeholder="Cidade" style="flex:2;" required>
+          <input type="text" placeholder="UF" maxlength="2" style="flex:1;" required>
+        </div>
         <input type="password" placeholder="Senha" required>
         <input type="password" placeholder="Confirmar senha" required>
         <button class="btn btn-gold" type="submit">Criar conta</button>
@@ -1137,12 +1148,12 @@ const FAQS = [
 ];
 
 /* ================= STATE ================= */
-let cart = JSON.parse(localStorage.getItem('elo3d_cart')||'[]');
+let cart = []; // carrinho só em memória — some ao atualizar/fechar a página, do jeito que foi pedido
 let currentProduct = null;
 let currentColor = null;
 let currentQty = 1;
 
-function saveCart(){ localStorage.setItem('elo3d_cart', JSON.stringify(cart)); updateCartBadge(); }
+function saveCart(){ updateCartBadge(); }
 function updateCartBadge(){ document.getElementById('cartCount').textContent = cart.reduce((s,i)=>s+i.qty,0); }
 
 function fmt(v){ return 'R$ ' + v.toFixed(2).replace('.',','); }
@@ -1592,6 +1603,14 @@ document.getElementById('couponBtn').addEventListener('click', ()=>{
 document.getElementById('checkoutBtn').addEventListener('click', async ()=>{
   if(cart.length === 0){ showToast('Seu carrinho está vazio'); return; }
 
+  if(!currentUser){
+    showToast('Você precisa entrar ou criar uma conta pra finalizar a compra');
+    openAccountModal();
+    // depois de logar/cadastrar com sucesso, volta e finaliza a compra sozinho
+    pendingCheckoutAfterLogin = true;
+    return;
+  }
+
   const items = cart.map(item=>{
     const p = PRODUCTS.find(x=>x.id===item.id);
     return { name: p.name, qty: item.qty, price: p.price };
@@ -1628,6 +1647,15 @@ document.getElementById('checkoutBtn').addEventListener('click', async ()=>{
 
 /* ================= ACCOUNT (Firebase Auth + Firestore) ================= */
 let currentUser = null; // { uid, name, email, celular, cpf }
+let pendingCheckoutAfterLogin = false;
+
+function onLoginSuccess(){
+  closeAccountModal();
+  if(pendingCheckoutAfterLogin){
+    pendingCheckoutAfterLogin = false;
+    document.getElementById('checkoutBtn').click();
+  }
+}
 
 function requireFirebase(){
   if(!firebaseReady){
@@ -1674,24 +1702,45 @@ document.querySelectorAll('.modal-tab').forEach(tab=>{
   });
 });
 
+// preenchimento automático de endereço a partir do CEP
+document.getElementById('signupCep').addEventListener('blur', async ()=>{
+  const cepInput = document.getElementById('signupCep');
+  const cep = cepInput.value.replace(/\D/g,'');
+  if(cep.length !== 8) return;
+  try{
+    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const data = await res.json();
+    if(data.erro) return;
+    const form = document.getElementById('cadastroForm');
+    const inputs = form.querySelectorAll('input');
+    document.getElementById('signupRua').value = data.logradouro || '';
+    inputs[8].value = data.bairro || ''; // bairro
+    inputs[9].value = data.localidade || ''; // cidade
+    inputs[10].value = data.uf || ''; // uf
+  } catch(e){ console.error('Erro ao buscar CEP:', e); }
+});
+
 document.getElementById('cadastroForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   if(!requireFirebase()) return;
   const inputs = e.target.querySelectorAll('input');
-  const [nome, email, celular, cpf, senha, confirmar] = Array.from(inputs).map(i=>i.value);
+  const [nome, email, celular, cpf, cep, rua, numero, complemento, bairro, cidade, uf, senha, confirmar] = Array.from(inputs).map(i=>i.value);
   if(senha !== confirmar){ showToast('As senhas não coincidem'); return; }
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true; btn.textContent = 'Criando conta...';
   try{
     const cred = await fbAuth.createUserWithEmailAndPassword(email, senha);
     const uid = cred.user.uid;
-    await fbDb.collection('customers').doc(uid).set({
+    const profile = {
       name: nome, email, celular, cpf,
+      endereco: { cep, rua, numero, complemento, bairro, cidade, uf },
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    currentUser = { uid, name: nome, email, celular, cpf };
+    };
+    await fbDb.collection('customers').doc(uid).set(profile);
+    currentUser = { uid, ...profile };
     showToast(`Conta criada! Bem-vindo(a), ${nome.split(' ')[0]}`);
     renderAccountModal();
+    onLoginSuccess();
   } catch(err){
     console.error(err);
     const msgs = {
@@ -1719,6 +1768,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e)=>{
     currentUser = { uid: cred.user.uid, email, ...profile };
     showToast(`Bem-vindo(a) de volta, ${(currentUser.name||email).split(' ')[0]}`);
     renderAccountModal();
+    onLoginSuccess();
   } catch(err){
     console.error(err);
     showToast('E-mail ou senha incorretos.');
